@@ -16,12 +16,12 @@ class SourceIntegratedBuildTests(unittest.TestCase):
         cls.go_build_source = SOURCE_BUILD_SCRIPT.read_text(encoding="utf-8")
         cls.setup_source = SETUP_SCRIPT.read_text(encoding="utf-8")
 
-    def test_uploaded_tun2socks_source_is_bundled_without_release_exe(self):
-        source = ROOT / "third_party" / "tun2socks-2.7.0"
-        self.assertTrue((source / "go.mod").is_file())
-        self.assertTrue((source / "main.go").is_file())
-        self.assertTrue((source / "LICENSE").is_file())
-        self.assertFalse(any(p.suffix.lower() == ".exe" for p in source.rglob("*")))
+    def test_ci_builds_tun2socks_from_upstream_source_without_release_exe(self):
+        workflow = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
+        self.assertIn("xjasonlyu/tun2socks", workflow)
+        self.assertIn("v2.7.0", workflow)
+        self.assertIn("go build", workflow)
+        self.assertNotIn("xjasonlyu/tun2socks/releases/download", workflow)
 
     def test_uploaded_wintun_amd64_dll_and_license_are_bundled(self):
         dll = ROOT / "tools" / "wintun.dll"
