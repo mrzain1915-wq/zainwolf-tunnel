@@ -1,0 +1,21 @@
+ZAINWOLF TUNNEL - THIRD-PARTY NOTICES
+=================================
+
+1) tun2socks v2.7.0 source
+Project: https://github.com/xjasonlyu/tun2socks
+License: MIT; see third_party/tun2socks-2.7.0/LICENSE.
+This package includes the upstream source archive contents and compiles the
+Windows AMD64 executable locally with Go. The uploaded source archive contains
+no prebuilt .exe. The first Go build may download dependencies from the Go
+module proxy unless those modules are already cached.
+Source LICENSE SHA256: 796abbf6d0258a01321f88f72c1d712417acdd75342510f0796f7c567b6f05e5
+
+2) Wintun 0.14.1 AMD64 DLL
+Project: https://www.wintun.net/
+The DLL is included from the user-provided Wintun 0.14.1 archive. The applicable
+Wintun prebuilt-binaries license is included at tools/licenses/Wintun-LICENSE.txt.
+This DLL is intended to be used alongside applications using only the documented
+Wintun API; retain its notices and comply with its redistribution conditions.
+DLL SHA256: e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce
+
+These are third-party components. ZainWolf Tunnel is not endorsed by either project.
