@@ -1,0 +1,97 @@
+name: Build ZainWolf Tunnel for Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build tun2socks.exe from source (v2.7.0)
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: |
+          git clone --branch v2.7.0 --depth 1 https://github.com/xjasonlyu/tun2socks.git tun2socks-src
+          cd tun2socks-src
+          go build -trimpath -ldflags "-s -w" -o ../tools/tun2socks.exe .
+
+      - name: Download Xray core (v26.11.9, SHA-256 verified)
+        shell: pwsh
+        run: |
+          $zip = "Xray-windows-64.zip"
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-windows-64.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "1262522266337b824f07beb8e1375786b437683b3890105469088f8e17e0a69d") { Write-Error "Xray SHA-256 mismatch: $hash"; exit 1 }
+          Expand-Archive -Path $zip -DestinationPath "tools" -Force
+          Get-ChildItem tools\xray.exe | Select-Object Name,Length | Format-Table -AutoSize
+
+      - name: Verify helpers are present
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($f in 'tools\tun2socks.exe','tools\wintun.dll','tools\xray.exe') {
+            if (-not (Test-Path $f)) { $missing += $f }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing helpers: $($missing -join ', ')"
+            exit 1
+          }
+          Get-ChildItem tools\tun2socks.exe,tools\wintun.dll,tools\xray.exe | Select-Object Name,Length | Format-Table -AutoSize
+
+      - name: Install build requirements
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt pyinstaller
+
+      - name: Run full test suite
+        run: python -m unittest -v test_config_import.py test_xray_backend.py test_noway_core.py test_windows_tun.py test_setup_script.py test_full_traffic_fallback.py
+
+      - name: Build Windows EXE (PyInstaller, full-featured)
+        run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name ZainWolfTunnel --collect-all paramiko --collect-all cryptography
+          --collect-all bcrypt --collect-all nacl
+          --add-binary "tools\tun2socks.exe;."
+          --add-binary "tools\wintun.dll;."
+          --add-binary "tools\xray.exe;tools"
+          ZainWolfTunnel.py
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
+
+      - name: Publish portable EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZainWolfTunnel-Windows-x64
+          path: dist/ZainWolfTunnel.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZainWolfTunnel-Setup-1.0.0
+          path: Output/ZainWolfTunnel-Setup-1.0.0.exe
+          if-no-files-found: error
+          retention-days: 14
