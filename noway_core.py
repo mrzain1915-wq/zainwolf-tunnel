@@ -339,3 +339,107 @@ def open_socks5_proxy_tunnel(
     except Exception:
         sock.close()
         raise
+
+
+# ---------------------------------------------------------------------------
+# Connection diagnostics (v1.0.1)
+# ---------------------------------------------------------------------------
+
+#: Windows socket error codes mapped to plain-language hints. The raw WinError
+#: (for example "[WinError 10051] ...") is never shown to the user on its own.
+SOCKET_ERROR_HINTS = {
+    10051: "Network is unreachable — check the host and port, your internet connection, "
+           "and whether a firewall or VPN is blocking this connection.",
+    10060: "Connection timed out — the server did not respond. It may be offline, "
+           "or your network/firewall may be blocking it.",
+    10061: "Connection refused — the server is reachable but nothing is listening on "
+           "that port. Check the port number.",
+    10065: "No route to the host — check the host address and your network connection.",
+    11001: "The hostname could not be resolved (DNS failure) — check the spelling of "
+           "the host and your DNS settings.",
+    11004: "The hostname could not be resolved (DNS failure) — check the spelling of "
+           "the host and your DNS settings.",
+    10013: "Permission denied — Windows Firewall or another program is blocking this connection.",
+    10054: "The connection was reset by the remote host.",
+    10053: "The connection was aborted — the network or the remote host dropped it.",
+}
+
+
+def socket_error_hint(exc: BaseException) -> Optional[str]:
+    """Return a plain-language hint for a socket error, or None if unknown."""
+    err_no = getattr(exc, "errno", None)
+    if err_no is None:
+        err_no = getattr(exc, "winerror", None)
+    if err_no in SOCKET_ERROR_HINTS:
+        return SOCKET_ERROR_HINTS[err_no]
+    if isinstance(exc, socket.gaierror):
+        return ("The hostname could not be resolved (DNS failure) — check the spelling "
+                "of the host and your DNS settings.")
+    if isinstance(exc, TimeoutError):
+        return SOCKET_ERROR_HINTS[10060]
+    if isinstance(exc, ConnectionRefusedError):
+        return SOCKET_ERROR_HINTS[10061]
+    return None
+
+
+def probe_first_hop(host: str, port: int, timeout: float = 5.0) -> Tuple[bool, str]:
+    """DNS-resolve plus TCP connect probe of the first hop.
+
+    Returns (True, detail) when the host:port is reachable, otherwise
+    (False, reason) where the reason names host:port and the likely cause.
+    """
+    try:
+        infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        hint = socket_error_hint(exc) or "The hostname could not be resolved."
+        return False, f"Could not resolve {host} ({host}:{port}): {hint}"
+    except OSError as exc:
+        hint = socket_error_hint(exc)
+        return False, f"Could not resolve {host} ({host}:{port}): {hint or exc}"
+    last_error: Optional[OSError] = None
+    for family, socktype, proto, _canon, sockaddr in infos:
+        try:
+            with socket.socket(family, socktype, proto) as probe:
+                probe.settimeout(timeout)
+                probe.connect(sockaddr)
+            return True, f"Reached {host}:{port} ({sockaddr[0]})."
+        except OSError as exc:
+            last_error = exc
+    hint = socket_error_hint(last_error) if last_error is not None else None
+    detail = str(last_error) if last_error is not None else "unknown error"
+    return False, f"Could not reach {host}:{port}: {hint or detail}"
+
+
+def format_failure_message(exc: BaseException, host: str, port: int, mode: str) -> str:
+    """Build the user-facing connection-failure message.
+
+    Always names host:port and the mode, and puts a plain-language hint ahead
+    of any raw error detail — the raw WinError is never shown on its own.
+    """
+    detail = str(exc) or exc.__class__.__name__
+    if isinstance(exc, OSError):
+        hint = socket_error_hint(exc)
+        if hint:
+            detail = f"{hint} (Technical detail: {detail})"
+    target = f"{host}:{port}"
+    if target in detail:
+        return f"{detail} (Mode: {mode})"
+    return f"Could not connect to {target} ({mode}). {detail}"
+
+
+def safe_server_display(spec: str) -> str:
+    """Return 'host:port' for display without ever exposing the password.
+
+    Tolerates the profile-loaded form 'host:port@username:' (password not yet
+    typed) as well as the full 'host:port@username:password' form.
+    """
+    raw = spec.strip()
+    if "@" not in raw:
+        return ""
+    endpoint = raw.split("@", 1)[0]
+    try:
+        host, port = parse_host_port(endpoint)
+    except ValueError:
+        return ""
+    host_display = f"[{host}]" if ":" in host else host
+    return f"{host_display}:{port}"

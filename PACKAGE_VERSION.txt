@@ -1,1 +1,2 @@
-ZainWolf Tunnel - Full Traffic graceful fallback - VLESS/VMess/Trojan Xray runtime - 2026-11-26
+1.0.1
+ZainWolf Tunnel 1.0.1 - connection diagnostics (first-hop reachability check + plain-language WinError hints), profile manager, log viewer with persistent zainwolf.log, professional sidebar/hero UI, real Settings (auto-reconnect, remember last profile, clear log on exit, start minimized). Full Traffic graceful fallback - VLESS/VMess/Trojan Xray runtime - 2026-11-27

@@ -75,5 +75,20 @@ class FullTrafficFallbackTests(unittest.TestCase):
         warning.assert_called_once()
 
 
+class AutoReconnectTests(unittest.TestCase):
+    def test_enabled_and_not_manual_and_not_closing(self):
+        self.assertTrue(ZainWolfTunnel.should_auto_reconnect(True, False, False, 0))
+        self.assertTrue(ZainWolfTunnel.should_auto_reconnect(True, False, False, 2))
+
+    def test_stops_at_three_attempts(self):
+        self.assertFalse(ZainWolfTunnel.should_auto_reconnect(True, False, False, 3))
+        self.assertFalse(ZainWolfTunnel.should_auto_reconnect(True, False, False, 4))
+
+    def test_never_when_disabled_or_manual_or_closing(self):
+        self.assertFalse(ZainWolfTunnel.should_auto_reconnect(False, False, False, 0))
+        self.assertFalse(ZainWolfTunnel.should_auto_reconnect(True, True, False, 0))
+        self.assertFalse(ZainWolfTunnel.should_auto_reconnect(True, False, True, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

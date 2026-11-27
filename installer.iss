@@ -1,12 +1,12 @@
 ; ZainWolf Tunnel — Inno Setup installer script
-; Builds ZainWolfTunnel-Setup-1.0.0.exe from the PyInstaller output.
+; Builds ZainWolfTunnel-Setup-1.0.1.exe from the PyInstaller output.
 ; Run on Windows after build_windows_exe.bat, or via the GitHub Actions
 ; workflow (.github/workflows/build-windows.yml), which installs Inno Setup
 ; and compiles this script automatically.
 ; The user only ever receives this setup EXE, never the raw portable EXE.
 
 #define AppName "ZainWolf Tunnel"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "ZainWolf"
 #define AppExe "ZainWolfTunnel.exe"
 

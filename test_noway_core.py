@@ -7,10 +7,14 @@ from ZainWolfTunnel import LocalHttpProxyServer, LocalSocksServer
 from noway_core import (
     DEFAULT_PAYLOAD,
     build_payload,
+    format_failure_message,
     open_http_proxy_tunnel,
     open_socks5_proxy_tunnel,
     parse_host_port,
     parse_server_spec,
+    probe_first_hop,
+    safe_server_display,
+    socket_error_hint,
 )
 
 
@@ -359,5 +363,72 @@ class CoreTests(unittest.TestCase):
             server.close()
 
 
+class DiagnosticsTests(unittest.TestCase):
+    def test_socket_error_hint_maps_windows_errors(self):
+        self.assertIn("unreachable", socket_error_hint(OSError(10051, "unreachable")).lower())
+        self.assertIn("timed out", socket_error_hint(OSError(10060, "timed out")).lower())
+        self.assertIn("refused", socket_error_hint(OSError(10061, "connection refused")).lower())
+        self.assertIn("resolve", socket_error_hint(socket.gaierror(11001, "getaddrinfo failed")).lower())
+        self.assertIn("resolve", socket_error_hint(socket.gaierror(11004, "getaddrinfo failed")).lower())
+        self.assertIsNone(socket_error_hint(OSError(9999, "some other error")))
+
+    def test_socket_error_hint_uses_exception_types(self):
+        self.assertIn("timed out", socket_error_hint(TimeoutError("timed out")).lower())
+        self.assertIn("refused", socket_error_hint(ConnectionRefusedError("refused")).lower())
+
+    def test_probe_first_hop_reaches_local_listener(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        try:
+            ok, detail = probe_first_hop("127.0.0.1", port, timeout=2.0)
+        finally:
+            listener.close()
+        self.assertTrue(ok)
+        self.assertIn(str(port), detail)
+
+    def test_probe_first_hop_refused_port(self):
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+        ok, detail = probe_first_hop("127.0.0.1", port, timeout=2.0)
+        self.assertFalse(ok)
+        self.assertIn(str(port), detail)
+
+    def test_probe_first_hop_unresolvable_host(self):
+        # A space in the hostname makes getaddrinfo fail locally (EAI_NONAME)
+        # without depending on any DNS resolver behaviour.
+        ok, detail = probe_first_hop("no such host.invalid", 443, timeout=3.0)
+        self.assertFalse(ok)
+        self.assertIn("no such host.invalid", detail)
+        self.assertIn("resolve", detail.lower())
+
+    def test_format_failure_message_names_target_mode_and_hint(self):
+        message = format_failure_message(
+            OSError(10051, "A socket operation was attempted to an unreachable network"),
+            "proxy.example.com", 8080, "HTTP + Payload")
+        self.assertIn("proxy.example.com:8080", message)
+        self.assertIn("HTTP + Payload", message)
+        self.assertIn("unreachable", message.lower())
+        # The raw WinError is present only as a labelled technical detail.
+        self.assertNotIn("[WinError 10051]", message.split("Technical detail:")[0])
+
+    def test_format_failure_message_keeps_probe_message(self):
+        message = format_failure_message(
+            RuntimeError("Could not reach proxy.example.com:8080: Network is unreachable"),
+            "proxy.example.com", 8080, "SOCKS5")
+        self.assertIn("proxy.example.com:8080", message)
+        self.assertIn("SOCKS5", message)
+
+    def test_safe_server_display_hides_password(self):
+        self.assertEqual(safe_server_display("ssh.example.com:443@user:s3cret"), "ssh.example.com:443")
+        self.assertEqual(safe_server_display("ssh.example.com:443@user:"), "ssh.example.com:443")
+        self.assertEqual(safe_server_display("[2001:db8::5]:22@user:secret"), "[2001:db8::5]:22")
+        self.assertEqual(safe_server_display("garbage"), "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
